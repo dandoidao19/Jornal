@@ -11,6 +11,7 @@ venv/
 data/audio_*/
 data/video_*/
 data/artigos/
+data/imagens/
 data/mini/
 data/dbg_*/
 data/*_upload*

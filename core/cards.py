@@ -1,3 +1,4 @@
+import hashlib
 import os
 import requests
 from io import BytesIO
@@ -7,16 +8,28 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36"
 }
 
-FONT_DIR = r"C:\Windows\Fonts"
-FONT_TITULO = os.path.join(FONT_DIR, "arialbd.ttf")
-FONT_TEXTO = os.path.join(FONT_DIR, "arial.ttf")
-FONT_FONTE = os.path.join(FONT_DIR, "arial.ttf")
+# Fontes empacotadas (grátis, licença livre) — funcionam também no deploy em nuvem.
+ASSETS_DIR = os.path.join(os.path.dirname(__file__), "..", "assets", "fonts")
+_FONT_RANDICAS = (ASSETS_DIR, r"C:\Windows\Fonts")
+
+FONT_TITULO = "DejaVuSans-Bold.ttf"
+FONT_TEXTO = "DejaVuSans.ttf"
+FONT_FONTE = "DejaVuSans.ttf"
+
+# Em sistemas com Arial (Windows), prefere Arial para tipografia similar a jornal.
+_FALLBACK = {
+    "DejaVuSans-Bold.ttf": "arialbd.ttf",
+    "DejaVuSans.ttf": "arial.ttf",
+}
+
+# Cache local de imagens baixadas, chaveadas por URL (evita re-baixar a cada edição).
+DIR_IMAGENS = os.path.join(os.path.dirname(__file__), "..", "data", "imagens")
 
 CORES = {
     "Economia": "#1e6f5c",
     "Politica": "#2b3a67",
     "Social": "#7b2d8b",
-    "Saude": "#0e7490",
+    "Saude": "#0d9488",
     "Meio ambiente": "#065f46",
     "Internet": "#0e7490",
     "Mundo": "#b45309",
@@ -26,11 +39,26 @@ CORES = {
 }
 
 
-def _fonte(caminho, tamanho):
-    try:
-        return ImageFont.truetype(caminho, tamanho)
-    except Exception:
-        return ImageFont.load_default()
+def _fonte(nome_rel: str, tamanho: int):
+    """Resolve a fonte: pacote incluído > Arial do Windows > fonte padrão."""
+    for diretorio in _FONT_RANDICAS:
+        caminho = os.path.join(diretorio, nome_rel)
+        if os.path.exists(caminho):
+            try:
+                return ImageFont.truetype(caminho, tamanho)
+            except Exception:
+                pass
+    for diretorio in _FONT_RANDICAS:
+        fallback = _FALLBACK.get(nome_rel)
+        if not fallback:
+            continue
+        caminho = os.path.join(diretorio, fallback)
+        if os.path.exists(caminho):
+            try:
+                return ImageFont.truetype(caminho, tamanho)
+            except Exception:
+                pass
+    return ImageFont.load_default()
 
 
 def quebrar_linhas(texto: str, fonte, max_largura: int, draw: ImageDraw) -> list:
@@ -88,9 +116,24 @@ def criar_card(noticia: dict, caminho: str, largura=1920, altura=1080) -> str:
 
 
 def _baixar_bytes(url: str) -> bytes | None:
+    """Baixa bytes com cache em disco chaveado pela URL (evita re-baixar imagens)."""
+    os.makedirs(DIR_IMAGENS, exist_ok=True)
+    chave = hashlib.md5(url.encode("utf-8")).hexdigest()
+    caminho = os.path.join(DIR_IMAGENS, chave + ".img")
+    if os.path.exists(caminho):
+        try:
+            with open(caminho, "rb") as f:
+                return f.read()
+        except Exception:
+            pass
     try:
         r = requests.get(url, headers=HEADERS, timeout=10)
         if r.status_code == 200 and r.content:
+            try:
+                with open(caminho, "wb") as f:
+                    f.write(r.content)
+            except Exception:
+                pass
             return r.content
     except Exception:
         pass

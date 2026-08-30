@@ -4,6 +4,7 @@ from moviepy import (
     AudioFileClip,
     CompositeAudioClip,
     ImageClip,
+    afx,
     concatenate_videoclips,
 )
 
@@ -76,20 +77,11 @@ def montar_video(
 
     video = concatenate_videoclips(clips, method="compose")
 
-    # trilha sonora em segundo plano (mixada baixinho)
+    # trilha sonora em segundo plano (mixada baixinho, em loop sem explodir memória)
     if musica_path and os.path.exists(musica_path):
         try:
             mus = AudioFileClip(musica_path)
-            # loop/duração igual ao vídeo
-            if mus.duration < video.duration:
-                # repete em loop simples cortando no tamanho do vídeo
-                n_loops = int(video.duration // mus.duration) + 1
-                # concatena cópias em sequência cortando o excesso
-                from moviepy import concatenate_audioclips
-
-                mus = concatenate_audioclips([mus] * n_loops).with_duration(video.duration)
-            else:
-                mus = mus.subclipped(0, video.duration)
+            mus = mus.with_effects([afx.AudioLoop(duration=video.duration)])
             mus = mus.with_volume_scaled(volume_musica)
             video = video.with_audio(CompositeAudioClip([video.audio, mus]))
         except Exception:

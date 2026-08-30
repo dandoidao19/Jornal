@@ -1,5 +1,6 @@
 import os
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 
 import streamlit as st
@@ -7,13 +8,18 @@ import streamlit as st
 from core.busca import buscar_noticias
 from core.categorias import categorias_disponiveis
 from core.narracao import gerar_narracao
-from core.roteiro import montar_roteiro
+from core.roteiro import montar_roteiro, montar_roteiro_completo
 from core.roteiro_ia import disponivel, montar_roteiro_ia
 from core.video import montar_video
 
 st.set_page_config(page_title="JornalDiário — Protótipo", layout="wide")
 
 VOZ_PADRAO = "pt-BR-FranciscaNeural"
+VOZES_DISPONIVEIS = [
+    "pt-BR-FranciscaNeural",
+    "pt-BR-AntonioNeural",
+    "pt-BR-BrendaNeural",
+]
 DIR_DADOS = os.path.join(os.path.dirname(__file__), "data")
 os.makedirs(DIR_DADOS, exist_ok=True)
 
@@ -22,6 +28,12 @@ def sessao(chave, valor):
     if chave not in st.session_state:
         st.session_state[chave] = valor
     return st.session_state[chave]
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _buscar_cacheadas(data) -> list:
+    """Busca notícias com cache de 1h por data (evita refazer toda a rede)."""
+    return buscar_noticias(data)
 
 
 sessao("etapa", 1)
@@ -35,6 +47,18 @@ if disponivel():
     st.sidebar.success("🤖 Roteirista por IA ativo")
 else:
     st.sidebar.warning("Roteirista por IA inativo. Adicione chaves em data/config.json.")
+
+st.sidebar.divider()
+st.sidebar.subheader("🎙️ Narração")
+voz_nome = st.sidebar.selectbox(
+    "Voz (TTS grátis)",
+    VOZES_DISPONIVEIS,
+    index=VOZES_DISPONIVEIS.index(st.session_state.voz)
+    if st.session_state.voz in VOZES_DISPONIVEIS
+    else 0,
+)
+st.session_state.voz = voz_nome
+st.sidebar.caption("francisca: feminina · antonio: masculina · brenda: feminina")
 
 st.sidebar.divider()
 st.sidebar.subheader("🎵 Trilha sonora")
@@ -87,7 +111,8 @@ if st.session_state.etapa == 1:
     if buscar:
         st.session_state.data = data_escolhida
         with st.spinner("Buscando nas fontes (GDELT + feeds BR + internacionais com tradução)..."):
-            noticias = buscar_noticias(data_escolhida)
+            noticias = _buscar_cacheadas(data_escolhida)
+            st.session_state["_cache_invalida"] = None  # marca que a busca usou cache
         if not noticias:
             st.warning("Nenhuma notícia encontrada para essa data. Tente uma data recente.")
         else:
@@ -172,21 +197,34 @@ elif st.session_state.etapa == 2:
             os.makedirs(audio_dir, exist_ok=True)
             st.session_state["audio_dir"] = audio_dir
             st.session_state["selecionadas"] = selecionadas
+            voz = st.session_state.voz
+            total_n = len(selecionadas)
             progresso = st.progress(0.0, text="Gerando roteiro e narração...")
-            for j, n in enumerate(selecionadas, start=1):
-                texto_ia = montar_roteiro_ia(n, j, len(selecionadas))
-                texto = texto_ia if texto_ia else montar_roteiro(n, j, len(selecionadas))
+            concluidos = 0
+
+            def _processar(item):
+                j, n = item
+                texto_ia = montar_roteiro_ia(n, j, total_n)
+                texto = texto_ia if texto_ia else montar_roteiro(n, j, total_n)
                 n["roteiro"] = texto
                 n["roteiro_fonte"] = "IA" if texto_ia else "Template"
                 caminho = os.path.join(audio_dir, f"{n['id']}.mp3")
                 try:
-                    gerar_narracao(texto, caminho, st.session_state.voz)
+                    gerar_narracao(texto, caminho, voz)
                     n["audio_ok"] = caminho
+                    n["audio_erro"] = None
                 except Exception as e:
                     n["audio_ok"] = None
                     n["audio_erro"] = str(e)
-                progresso.progress(j / len(selecionadas),
-                                   text=f"Notícia {j}/{len(selecionadas)}")
+                return n
+
+            with ThreadPoolExecutor(max_workers=min(3, total_n)) as ex:
+                futs = [ex.submit(_processar, (j, n))
+                        for j, n in enumerate(selecionadas, start=1)]
+                for _ in as_completed(futs):
+                    concluidos += 1
+                    progresso.progress(concluidos / total_n,
+                                       text=f"Notícia {concluidos}/{total_n}")
             progresso.empty()
             st.session_state.etapa = 3
             st.rerun()
@@ -201,6 +239,17 @@ elif st.session_state.etapa == 3:
     if not selecionadas:
         st.warning("Nenhuma notícia selecionada.")
         st.stop()
+
+    if st.button("👁 Ver roteiro completo (abertura + todas as notícias)"):
+        completo = montar_roteiro_completo(selecionadas)
+        st.text_area(
+            "Roteiro completo da edição",
+            value=completo,
+            height=260,
+            key="roteiro_completo_v3",
+        )
+        st.caption("Use o texto acima como base para revisão ou para exportar antes de gerar as narrações.")
+    st.markdown("---")
 
     aprovadas = 0
     for i, n in enumerate(selecionadas, start=1):

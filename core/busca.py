@@ -173,6 +173,14 @@ def _google_rss(data_str: str, limite: int = 10) -> list:
             titulo = _titulo_limpo(e.get("title", ""))
             if not link or not titulo:
                 continue
+            publicada = e.get("published_parsed")
+            if publicada:
+                try:
+                    data_entrada = f"{publicada.tm_mday:02d}-{publicada.tm_mon:02d}-{publicada.tm_year}"
+                    if data_entrada != dia:
+                        continue
+                except Exception:
+                    pass
             resumo = html.unescape(re.sub(r"<[^>]+>", " ", e.get("summary", "")))
             imagem = extrair_imagem(e, link)
             saida.append(
@@ -308,18 +316,8 @@ def _gdelt_internacional(data_str: str, limite: int = 3) -> list:
     return []
 
 
-def buscar_noticias(data) -> list:
-    """Busca notícias reais para uma data. GDELT + feeds BR + Google News + internacionais traduzidos."""
-    data_str = data.strftime("%Y%m%d")
-    noticias = _gdelt(data_str)
-    for nome, url_feed in FEEDS_BR.items():
-        noticias += _feed(url_feed, data_str, nome)
-    noticias += _google_rss(data_str)
-    # internacionais (prévia já traduzida de forma natural)
-    for nome, url_feed in FEEDS_INT.items():
-        noticias += _feed_internacional(url_feed, nome, data_str)
-    noticias += _gdelt_internacional(data_str)
-
+def _deduplicar(noticias: list) -> list:
+    """Remove duplicatas por título normalizado (mantém o resumo mais completo)."""
     vistos = {}
     for n in noticias:
         chave = normalizar(n["titulo"])
@@ -332,5 +330,18 @@ def buscar_noticias(data) -> list:
         else:
             vistos[chave] = n
 
-    ordenadas = sorted(vistos.values(), key=lambda n: n["categoria"])
-    return ordenadas
+    return sorted(vistos.values(), key=lambda n: n["categoria"])
+
+
+def buscar_noticias(data) -> list:
+    """Busca notícias reais para uma data. GDELT + feeds BR + Google News + internacionais traduzidos."""
+    data_str = data.strftime("%Y%m%d")
+    noticias = _gdelt(data_str)
+    for nome, url_feed in FEEDS_BR.items():
+        noticias += _feed(url_feed, data_str, nome)
+    noticias += _google_rss(data_str)
+    # internacionais (prévia já traduzida de forma natural)
+    for nome, url_feed in FEEDS_INT.items():
+        noticias += _feed_internacional(url_feed, nome, data_str)
+    noticias += _gdelt_internacional(data_str)
+    return _deduplicar(noticias)
