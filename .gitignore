@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env
+.pytest_cache/
+
+# App - dados gerados (não versionar)
+data/audio_*/
+data/video_*/
+data/artigos/
+data/mini/
+data/dbg_*/
+data/*_upload*
+data/*.mp3
+data/*.mp4
+data/*.wav
+data/*.m4a
+dbg_videoTEMP*.mp4
+mini_test.mp4
+
+# SEGREDO - nunca commitado (use config.example.json como modelo)
+data/config.json
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS
+.DS_Store
+Thumbs.db

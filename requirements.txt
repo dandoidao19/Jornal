@@ -1,0 +1,8 @@
+streamlit
+edge-tts
+feedparser
+moviepy
+imageio-ffmpeg
+requests
+Pillow
+trafilatura
