@@ -5,6 +5,7 @@ from datetime import date
 
 import streamlit as st
 
+from core import __version__
 from core.busca import buscar_noticias
 from core.categorias import categorias_disponiveis
 from core.narracao import gerar_narracao
@@ -13,6 +14,40 @@ from core.roteiro_ia import disponivel, montar_roteiro_ia
 from core.video import montar_video
 
 st.set_page_config(page_title="JornalDiário — Protótipo", layout="wide")
+
+# CSS responsivo: apenas em telas <=768px (smartphone). No PC (>768px) a interface não muda.
+st.markdown(
+    """
+<style>
+@media (max-width: 768px) {
+  /* Empilha colunas (4 colunas → 1 por linha) */
+  [data-testid="column"] { width: 100% !important; flex: 1 1 100% !important; min-width: 100% !important; }
+  [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; gap: 0.6rem !important; }
+  /* Botões com área de toque maior (48px mínimo) */
+  .stButton > button { width: 100% !important; padding: 0.95rem 1rem !important; font-size: 1.06rem !important; min-height: 48px !important; border-radius: 12px !important; }
+  .stDownloadButton > button { width: 100% !important; min-height: 48px !important; }
+  /* Imagens ocupam largura total */
+  [data-testid="stImage"] img { width: 100% !important; max-width: 100% !important; height: auto !important; }
+  [data-testid="stImage"] { width: 100% !important; }
+  /* Checkboxes e radios com área maior */
+  [data-testid="stCheckbox"] label, [data-testid="stRadio"] label { font-size: 1.06rem !important; padding: 0.45rem 0 !important; }
+  [data-testid="stCheckbox"] input { transform: scale(1.25); }
+  /* Text areas legíveis */
+  .stTextArea textarea { font-size: 1.02rem !important; line-height: 1.55 !important; }
+  /* Título e cabeçalhos compactos */
+  h1 { font-size: 1.55rem !important; line-height: 1.2 !important; }
+  h2, h3 { font-size: 1.25rem !important; }
+  /* Date input e select ocupam largura total */
+  [data-testid="stDateInput"], [data-testid="stSelectbox"] { width: 100% !important; }
+  /* Áudio player com toque */
+  [data-testid="stAudio"] { width: 100% !important; }
+  /* Versão sempre visível mesmo com sidebar fechada */
+  [data-testid="stSidebar"] [data-testid="stCaptionContainer"] { font-size: 0.88rem !important; }
+}
+</style>
+""",
+    unsafe_allow_html=True,
+)
 
 VOZ_PADRAO = "pt-BR-FranciscaNeural"
 VOZES_DISPONIVEIS = [
@@ -42,7 +77,7 @@ sessao("noticias", [])
 sessao("voz", VOZ_PADRAO)
 
 st.title("📰 JornalDiário — Jornal eletrônico diário")
-st.caption("Vídeo com imagem de fundo + trilha sonora · roteirista lê o artigo completo e resume em linguagem simples")
+st.caption(f"v{__version__} • Vídeo com imagem de fundo + trilha sonora · roteirista lê o artigo completo e resume em linguagem simples")
 if disponivel():
     st.sidebar.success("🤖 Roteirista por IA ativo")
 else:
@@ -88,6 +123,10 @@ aba = st.sidebar.radio(
 )
 
 st.session_state.etapa = {"1": 1, "2": 2, "3": 3, "4": 4}.get(aba[0], 1)
+
+st.sidebar.divider()
+st.sidebar.caption(f"JornalDiário v{__version__} • grátis • código em github.com/dandoidao19/Jornal")
+st.sidebar.caption("Atualizações versionadas a cada alteração.")
 
 
 # ---------------------------------------------------------------- ETAPA 1
@@ -381,3 +420,8 @@ elif st.session_state.etapa == 4:
         st.balloons()
         st.success("Edição aprovada! Aqui termina o protótipo do fluxo completo.")
         st.info("Próximos passos reais: upload no YouTube (API) e geração da versão TikTok 9:16.")
+
+
+# Rodapé com versão — visível em PC e celular (fora da sidebar, sempre no fim)
+st.divider()
+st.caption(f"JornalDiário v{__version__} • grátis • alterações versionadas — github.com/dandoidao19/Jornal")
